@@ -5,4 +5,4 @@ key                 = "terraform.tfstate"
 encrypt             = true
 acl                 = "private"
 tablestore_endpoint = "https://tf-statelock.cn-shanghai.ots.aliyuncs.com"
-tablestore_table    = "terraform_locks
+tablestore_table    = "terraform_locks"
