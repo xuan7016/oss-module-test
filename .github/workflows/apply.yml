@@ -1,0 +1,52 @@
+name: Terraform Environment Apply
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['environments/**']
+    types: [closed]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: environments/zhili_account
+    env:
+      OIDC_PROVIDER_ARN: acs:ram::1456485998503207:oidc-provider/github-actions
+      ROLE_ARN: acs:ram::1456485998503207:role/terraform-apply
+    steps:
+      - name: Checkout Merged Commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.4
+          terraform_wrapper: false
+      - name: Authenticate To Alibaba Cloud With OIDC
+        id: credentials
+        uses: aliyun/configure-aliyun-credentials-action@v1
+        with:
+          oidc-provider-arn: ${{ env.OIDC_PROVIDER_ARN }}
+          role-to-assume: ${{ env.ROLE_ARN }}
+          audience: sts.aliyuncs.com
+          role-session-name: github-apply-${{ github.run_id }}
+          role-session-expiration: 3600
+      - name: Terraform Plan And Apply
+        env:
+          ALICLOUD_ACCESS_KEY: ${{ steps.credentials.outputs.aliyun-access-key-id }}
+          ALICLOUD_SECRET_KEY: ${{ steps.credentials.outputs.aliyun-access-key-secret }}
+          ALICLOUD_SECURITY_TOKEN: ${{ steps.credentials.outputs.aliyun-security-token }}
+        run: |
+          terraform init -input=false -backend-config=backend.tfvars
+          terraform plan -input=false -lock-timeout=5m -out=oss.tfplan
+          terraform apply -input=false -lock-timeout=5m oss.tfplan

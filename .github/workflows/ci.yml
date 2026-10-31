@@ -1,0 +1,28 @@
+name: Terraform Tests
+
+on:
+  pull_request:
+    paths: ['modules/**']
+  push:
+    branches: [main]
+    paths: ['modules/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+      - name: Initialize Terraform
+        run: terraform -chdir=modules/oss init -backend=false -input=false
+      - name: Run Terraform Tests
+        run: terraform -chdir=modules/oss test

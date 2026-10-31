@@ -1,0 +1,58 @@
+name: Terraform Environment Plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['environments/**']
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: environments/zhili_account
+    env:
+      OIDC_PROVIDER_ARN: acs:ram::1456485998503207:oidc-provider/github-actions
+      ROLE_ARN: acs:ram::1456485998503207:role/terraform-plan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.4
+          terraform_wrapper: false
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: 1.22.0
+      - name: Authenticate To Alibaba Cloud With OIDC
+        id: credentials
+        uses: aliyun/configure-aliyun-credentials-action@v1
+        with:
+          oidc-provider-arn: ${{ env.OIDC_PROVIDER_ARN }}
+          role-to-assume: ${{ env.ROLE_ARN }}
+          audience: sts.aliyuncs.com
+          role-session-name: github-plan-${{ github.run_id }}
+          role-session-expiration: 3600
+      - name: Terraform Plan
+        env:
+          ALICLOUD_ACCESS_KEY: ${{ steps.credentials.outputs.aliyun-access-key-id }}
+          ALICLOUD_SECRET_KEY: ${{ steps.credentials.outputs.aliyun-access-key-secret }}
+          ALICLOUD_SECURITY_TOKEN: ${{ steps.credentials.outputs.aliyun-security-token }}
+        run: |
+          terraform init -input=false -backend-config=backend.tfvars
+          terraform plan -input=false -lock-timeout=5m -out=oss.tfplan
+          terraform show -json oss.tfplan > plan.json
+      - name: Enforce OPA Policies
+        run: |
+          opa eval --fail --format pretty --data ../../modules/oss/policies/oss.rego --input plan.json 'data.oss.deny'
