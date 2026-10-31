@@ -35,6 +35,19 @@ jobs:
         uses: open-policy-agent/setup-opa@v2
         with:
           version: 1.22.0
+      - name: Show OIDC claims
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('sts.aliyuncs.com');
+            const claims = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
+            );
+            core.info(JSON.stringify({
+              iss: claims.iss,
+              aud: claims.aud,
+              sub: claims.sub
+            }, null, 2));
       - name: Authenticate To Alibaba Cloud With OIDC
         id: credentials
         uses: aliyun/configure-aliyun-credentials-action@v1
